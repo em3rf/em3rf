@@ -1,0 +1,21 @@
+# @package _global_
+
+defaults:
+  - _self_
+  - callbacks: default
+  - data: breaking_bad
+  - hydra: default
+  - loggers: csv
+  - model: null
+  - trainer: default
+
+  # Experiment Config Here
+  # Create a config in experiment folder and simply run python train.py experiment=xxx
+  - experiment: null
+
+project_name: GARF
+experiment_name: exp-${now:%Y-%m-%d_%H-%M-%S}
+tags: ["dev"]
+seed: 1116
+
+ckpt_path: 

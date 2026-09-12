@@ -1,1 +1,22 @@
+# @package _global_
 
+defaults:
+  - hydra: default
+  - model: denoiser_flow_matching
+  - _self_
+
+experiment_name: exp-${now:%Y-%m-%d_%H-%M-%S}
+tags: ["inference"]
+seed: 1116
+
+ckpt_path: ./output/epoch-149-eao.ckpt
+
+fabric:
+  _target_: lightning.fabric.Fabric
+  accelerator: auto
+  precision: 16-mixed
+  devices: [0]
+
+model:
+  val_noise_scheduler:
+    sigma_schedule: exponential

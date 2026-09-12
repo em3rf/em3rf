@@ -1,0 +1,54 @@
+defaults:
+  - /model@feature_extractor: frac_seg
+
+_target_: assembly.models.denoiser.DenoiserFlowMatching
+feature_extractor_ckpt: null
+
+# --- NEW OVERLAP LOSS PARAMS ---
+use_no_overlap_loss: False      # Set to False to disable the loss entirely
+no_overlap_weight: 0.2         # Alpha parameter for your formula
+no_overlap_grid_size: 32       # Volumetric grid resolution
+# -------------------------------
+
+denoiser:
+  _target_: assembly.models.denoiser.DenoiserTransformer
+  in_dim: ${..feature_extractor.pc_feat_dim} #${..feature_extractor.encoder.dim} #in_dim: ${getIndex:${..feature_extractor.encoder.dec_channels}, 0}
+  out_dim: 7
+  embed_dim: 512
+  num_layers: 6
+  num_heads: 8
+  dropout_rate: 0.2
+  trans_out_dim: 3
+  rot_out_dim: 3
+noise_scheduler:
+  _target_: assembly.models.denoiser.SE3FlowMatchEulerDiscreteScheduler
+  num_train_timesteps: 1000
+  stochastic_paths: False
+  stochastic_level: 0.1
+  min_stochastic_epsilon: 0.01
+  sigma_schedule: linear
+val_noise_scheduler:
+  _target_: assembly.models.denoiser.SE3FlowMatchEulerDiscreteScheduler
+  num_train_timesteps: 1000
+  stochastic_paths: False
+  stochastic_level: 0.05
+  min_stochastic_epsilon: 0.01
+  sigma_schedule: linear
+inference_config:
+  num_inference_steps: 20
+  anchor_free: False
+  max_iters: 1
+  one_step_init: False
+  write_to_json: True
+optimizer:
+  _target_: torch.optim.AdamW
+  _partial_: True
+  lr: 2e-4
+  betas: [0.95, 0.999]
+  weight_decay: 1e-6
+  eps: 1e-8
+lr_scheduler:
+  _target_: torch.optim.lr_scheduler.MultiStepLR
+  _partial_: True
+  milestones: [900, 1200]
+  gamma: 0.5

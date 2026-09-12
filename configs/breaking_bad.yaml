@@ -1,0 +1,13 @@
+_target_: assembly.data.breaking_bad.BreakingBadDataModule
+data_root: /state/partition1/job-${oc.env:SLURM_JOB_ID}/breaking_bad_vol.hdf5
+categories: ["everyday"]
+min_parts: 2
+max_parts: 20
+num_points_to_sample: 5000
+min_points_per_part: 20
+sample_method: weighted
+batch_size: 32
+num_workers: 16
+num_removal: 0
+num_redundancy: 0
+multi_ref: false
