@@ -6,11 +6,6 @@ import h5py
 import numpy as np
 from torch.utils.data import Dataset
 
-from collections import defaultdict
-import random
-
-
-
 COLORS = [
     [254, 138, 24],
     [201, 26, 9],
@@ -27,37 +22,8 @@ COLORS = [
     [255, 128, 13],
 ]
 
-def keep_three_per_category(data_list, seed=0):
-    from collections import defaultdict
-    import random
 
-    random.seed(seed)
-
-    categories = defaultdict(list)
-
-    for path in data_list:
-        parts = path.split("/")
-        if len(parts) >= 3:
-            category = parts[1]
-            categories[category].append(path)
-
-    # Keep 3 from each category and FLATTEN
-    output_list = []
-    for cat, items in categories.items():
-        if len(items) <= 3:
-            output_list.extend(items)
-        else:
-            output_list.extend(random.sample(items, 3))
-
-    return output_list
-
-
-
-
-
-
-
-class BreakingBadBase(Dataset):
+class BreakingBadBaseColor(Dataset):
     """Base Dataset for the Breaking Bad dataset."""
 
     COLORS = COLORS
@@ -91,9 +57,6 @@ class BreakingBadBase(Dataset):
         self.mesh_sample_strategy = mesh_sample_strategy
         self.random_anchor = random_anchor
         self.data_list = self.get_data_list()
-        # self.data_list = self.data_list[-150:300]  #ADEELA
-        # self.data_list = self.data_list[:1000]  #ADEELA
-        # self.data_list = keep_three_per_category(self.data_list)
 
         # Check for color only once
         self.has_color = False
@@ -135,18 +98,11 @@ class BreakingBadBase(Dataset):
         for item in data_list:
             try:
                 num_parts = len(h5_file[item]["pieces"].keys())
-                # print(f'item: {item}--------------num_parts: {num_parts}')
                 # Here's the limit
                 # For removal, we need to ensure that, after removal, number of parts should still greater than min_parts
                 # For redundancy, we need to ensure that,
                 # 1. after redundancy, number of parts should still less than max_parts
                 # 2. num of redundancy should not exceed num of parts
-                
-                # Add this check here:
-                # if num_parts == self.target_parts:
-                #     # You can still keep your other safety checks if needed, 
-                #     # or just append if it matches your target number
-                #     filtered_data_list.append(item)
                 if (
                     self.min_parts + self.num_removal
                     <= num_parts
@@ -187,15 +143,17 @@ class BreakingBadBase(Dataset):
             trimesh.Trimesh(
                 vertices=np.array(h5_file[name]["pieces"][piece]["vertices"][:]),
                 faces=np.array(h5_file[name]["pieces"][piece]["faces"][:]),
+                vertex_colors=np.array(h5_file[name]["pieces"][piece]["colors"][:]), # given is RGB (float), saves in mesh RGBA uint
             )
             for piece in pieces
         ]
+        
         meshes_max_scale = 1.0
         for i in range(num_parts):
             extents = meshes[i].extents
             meshes_max_scale = max(meshes_max_scale, max(extents))
         meshes = [mesh.apply_scale(1.0 / meshes_max_scale) for mesh in meshes]
-
+        
         shared_faces = [
             (
                 np.array(h5_file[name]["pieces"][piece]["shared_faces"][:])
@@ -204,6 +162,7 @@ class BreakingBadBase(Dataset):
             )
             for idx, piece in enumerate(pieces)
         ]
+        
 
         graph = self.get_graph(shared_faces=shared_faces)
 
@@ -225,8 +184,6 @@ class BreakingBadBase(Dataset):
             assert len(shared_faces) == num_parts
 
         # Redundancy to simulate extra part
-        
-    
         redundant_pieces = []
         if self.num_redundancy > 0:
             assert (
@@ -256,71 +213,9 @@ class BreakingBadBase(Dataset):
             num_parts += self.num_redundancy
 
         h5_file.close()
-        '''
-        #   ADEELA STARTS
-        # Redundancy to simulate extra part by sampling from OTHER puzzles
-        redundant_pieces_info = []
-        if self.num_redundancy > 0:
-            import math
-            # Calculate 20% extra dynamically based on original num_parts
-            to_add = max(1, math.ceil(num_parts * 0.20))
-            
-            # Safety check: don't exceed max_parts limit
-            if num_parts + to_add > self.max_parts:
-                to_add = self.max_parts - num_parts
 
-            redundant_meshes = []
-            
-            # Sample random pieces from other puzzles in the dataset
-            while len(redundant_meshes) < to_add:
-                random_name = random.choice(self.data_list)
-                if random_name == name: 
-                    continue
-                
-                try:
-                    # Get pieces from a different puzzle
-                    other_pieces = list(h5_file[random_name]["pieces"].keys())
-                    rand_p = random.choice(other_pieces)
-                    
-                    # Load the geometry
-                    m = trimesh.Trimesh(
-                        vertices=np.array(h5_file[random_name]["pieces"][rand_p]["vertices"][:]),
-                        faces=np.array(h5_file[random_name]["pieces"][rand_p]["faces"][:]),
-                    )
-                    
-                    # Match the scale of the current puzzle
-                    m.apply_scale(1.0 / meshes_max_scale)
-                    
-                    redundant_meshes.append(m)
-                    # Use a string format similar to what the original code expected
-                    redundant_pieces_info.append(f"{random_name}/pieces/{rand_p}")
-                except:
-                    continue 
-
-            redundant_shared_faces = [
-                -np.ones(len(mesh.faces), dtype=np.int64) for mesh in redundant_meshes
-            ]
-
-            # Mix the distractors into the current puzzle
-            meshes.extend(redundant_meshes)
-            shared_faces.extend(redundant_shared_faces)
-            num_parts += to_add
-            
-            # Update this so the dictionary at the end doesn't break
-            redundant_pieces = redundant_pieces_info 
-
-        h5_file.close()
-        #   ADEELA ENDS
-        '''
-        
-        
-        
-        
-        
-        
-        
-
-        pointclouds_gt, pointclouds_normals_gt, fracture_surface_gt = (
+        # ------ ADEELA STARTS --------
+        pointclouds_gt, pointclouds_normals_gt, fracture_surface_gt, pointclouds_colors_gt = (
             self.sample_points(
                 meshes=meshes,
                 shared_faces=shared_faces,
@@ -339,7 +234,10 @@ class BreakingBadBase(Dataset):
             "redundant_pieces": ",".join(redundant_pieces),
             "pieces": ",".join(pieces_names),
             "mesh_scale": meshes_max_scale,
+            "pointclouds_colors_gt": pointclouds_colors_gt,  #ADEELA
         }
+        # ------ ADEELA ENDS --------
+        # breakpoint()
 
         return data
 
